@@ -1,18 +1,29 @@
 import { useState, useCallback } from 'react'
 import { convertEthToBSV, type ConversionResult } from './lib/converter'
-import { Copy, ArrowRight, Shield, Key, AlertCircle, Check } from 'lucide-react'
+import { Copy, ArrowRight, Shield, Key, AlertCircle, Check, Wallet, Loader2 } from 'lucide-react'
 import './App.css'
+
+const API_URL = import.meta.env.VITE_API_URL || ''
+
+interface PrivyResult {
+  privyWalletId: string
+  privyWalletAddress: string
+  conversion: ConversionResult
+}
 
 function App() {
   const [ethKey, setEthKey] = useState('')
   const [network, setNetwork] = useState<'mainnet' | 'testnet'>('mainnet')
   const [result, setResult] = useState<ConversionResult | null>(null)
+  const [privyResult, setPrivyResult] = useState<PrivyResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [privyLoading, setPrivyLoading] = useState(false)
 
   const handleConvert = useCallback(() => {
     setError(null)
     setResult(null)
+    setPrivyResult(null)
     if (!ethKey.trim()) {
       setError('Ethereum秘密鍵を入力してください')
       return
@@ -28,6 +39,31 @@ function App() {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleConvert()
   }, [handleConvert])
+
+  const handlePrivyCreate = useCallback(async () => {
+    setError(null)
+    setResult(null)
+    setPrivyResult(null)
+    setPrivyLoading(true)
+    try {
+      const resp = await fetch(`${API_URL}/api/wallets/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network }),
+      })
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ detail: resp.statusText }))
+        throw new Error(data.detail || `API error: ${resp.status}`)
+      }
+      const data: PrivyResult = await resp.json()
+      setPrivyResult(data)
+      setResult(data.conversion)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPrivyLoading(false)
+    }
+  }, [network])
 
   const copyToClipboard = useCallback(async (text: string, field: string) => {
     try {
@@ -63,12 +99,73 @@ function App() {
             <p className="text-blue-300/80">
               EthereumとBitcoin SVは同じsecp256k1楕円曲線を使用しています。
               生の32バイト秘密鍵は数学的に同一であり、エンコード形式（hex → WIF）とアドレス導出方式のみ異なります。
-              変換はすべてブラウザ内で完結し、秘密鍵は外部に送信されません。
             </p>
           </div>
         </div>
 
-        {/* Input Section */}
+        {/* Privy Wallet Creation */}
+        <div className="bg-gray-800/50 border border-purple-500/30 rounded-xl p-6 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Wallet className="w-5 h-5 text-purple-400" />
+            <h2 className="text-sm font-semibold text-purple-200">Privy ウォレット作成</h2>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">
+            Privyで新しいETHウォレットを作成し、BSV鍵を自動導出します。秘密鍵はHPKE暗号化で安全にエクスポートされます。
+          </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handlePrivyCreate}
+              disabled={privyLoading}
+              className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            >
+              {privyLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  作成中...
+                </>
+              ) : (
+                <>
+                  <Wallet className="w-4 h-4" />
+                  新規ウォレット作成 + BSV変換
+                </>
+              )}
+            </button>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-400">ネットワーク:</label>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setNetwork('mainnet')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    network === 'mainnet'
+                      ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                      : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700'
+                  }`}
+                >
+                  Mainnet
+                </button>
+                <button
+                  onClick={() => setNetwork('testnet')}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    network === 'testnet'
+                      ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                      : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700'
+                  }`}
+                >
+                  Testnet
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="flex-1 border-t border-gray-700/30" />
+          <span className="text-xs text-gray-500">または手動変換</span>
+          <div className="flex-1 border-t border-gray-700/30" />
+        </div>
+
+        {/* Manual Input Section */}
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 mb-6">
           <label className="block text-sm font-medium text-gray-300 mb-2">
             Ethereum 秘密鍵 (Hex)
@@ -84,33 +181,7 @@ function App() {
             />
           </div>
 
-          <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center gap-4">
-              <label className="text-sm text-gray-400">ネットワーク:</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setNetwork('mainnet')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    network === 'mainnet'
-                      ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                      : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700'
-                  }`}
-                >
-                  Mainnet
-                </button>
-                <button
-                  onClick={() => setNetwork('testnet')}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    network === 'testnet'
-                      ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                      : 'bg-gray-700/50 text-gray-400 border border-gray-600/30 hover:bg-gray-700'
-                  }`}
-                >
-                  Testnet
-                </button>
-              </div>
-            </div>
-
+          <div className="flex items-center justify-end mt-4">
             <button
               onClick={handleConvert}
               className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50"
@@ -132,6 +203,32 @@ function App() {
         {/* Results */}
         {result && (
           <div className="space-y-6">
+            {/* Privy Wallet Info */}
+            {privyResult && (
+              <div className="bg-gray-800/50 border border-purple-500/20 rounded-xl overflow-hidden">
+                <div className="px-5 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-purple-300" />
+                  <h3 className="font-semibold text-purple-200">Privy ウォレット</h3>
+                </div>
+                <div className="p-5 space-y-4">
+                  <ResultField
+                    label="ウォレットID"
+                    value={privyResult.privyWalletId}
+                    fieldId="privyId"
+                    copiedField={copiedField}
+                    onCopy={copyToClipboard}
+                  />
+                  <ResultField
+                    label="ETHアドレス (Privy)"
+                    value={privyResult.privyWalletAddress}
+                    fieldId="privyAddr"
+                    copiedField={copiedField}
+                    onCopy={copyToClipboard}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Conversion Flow Visual */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Ethereum Side */}
@@ -227,9 +324,9 @@ function App() {
 
         {/* Footer Info */}
         <footer className="mt-12 pt-6 border-t border-gray-700/30 text-center text-xs text-gray-500">
-          <p>すべての変換処理はブラウザ内で完結します。秘密鍵は外部サーバーに送信されません。</p>
+          <p>手動変換はブラウザ内で完結します。Privyウォレット作成はサーバー経由でHPKE暗号化通信を使用します。</p>
           <p className="mt-1">
-            Powered by <span className="text-gray-400">@noble/secp256k1</span> &amp; <span className="text-gray-400">@noble/hashes</span> (audited cryptographic libraries)
+            Powered by <span className="text-gray-400">@noble/secp256k1</span>, <span className="text-gray-400">Privy.io</span> &amp; <span className="text-gray-400">HPKE (RFC 9180)</span>
           </p>
         </footer>
       </main>
