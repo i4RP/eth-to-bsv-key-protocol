@@ -12,6 +12,7 @@
 export { convertEthToBSV, privateKeyToWIF, publicKeyToBSVAddress, publicKeyToEthAddress } from './converter';
 export { normalizeHexKey, hexToBytes, bytesToHex, hash160, hashKeccak256 } from './crypto';
 export { base58Encode, base58Decode, base58CheckEncode, base58CheckDecode } from './encoding';
+export { PrivyBSVBridge, createPrivyBSVBridge } from './privy';
 export { Network, WIF_VERSION, P2PKH_VERSION } from './types';
 export type {
   ConversionResult,
@@ -23,3 +24,8 @@ export type {
   BSVAddress,
   EthAddress,
 } from './types';
+export type {
+  PrivyBSVConfig,
+  PrivyBSVWalletResult,
+  AuthorizationContext,
+} from './privy';
